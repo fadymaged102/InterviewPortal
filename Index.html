@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Open+Sans:wght@400;600&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ... YOUR EXACT SAME CSS STYLES GO HERE ... */
+    :root { --primary-color: #e60000; --secondary-color: #2c3e50; --bg-gradient: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); --glass-bg: rgba(255, 255, 255, 0.95); --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15); }
+    body { font-family: 'Open Sans', sans-serif; background: radial-gradient(circle at 10% 20%, rgb(239, 246, 249) 0%, rgb(206, 239, 253) 90%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; overflow-x: hidden; }
+    .branding { position: absolute; top: 20px; left: 30px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 24px; color: var(--secondary-color); letter-spacing: 1px; z-index: 10; }
+    .branding span { color: var(--primary-color); }
+    .container { background: var(--glass-bg); backdrop-filter: blur(8px); padding: 3rem; border-radius: 20px; box-shadow: var(--glass-shadow); width: 90%; max-width: 700px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.5); transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .container:hover { transform: translateY(-5px); box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.2); }
+    h1 { font-family: 'Montserrat', sans-serif; margin-bottom: 0.5rem; color: var(--secondary-color); font-weight: 700; }
+    h2 { font-family: 'Montserrat', sans-serif; color: #34495e; margin-bottom: 20px; line-height: 1.4; }
+    p { margin-bottom: 2rem; color: #7f8c8d; font-size: 1.1em; }
+    input[type="email"] { width: 80%; padding: 15px; margin-bottom: 25px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px; transition: all 0.3s; background: #fdfdfd; }
+    input[type="email"]:focus { border-color: var(--primary-color); box-shadow: 0 0 10px rgba(230, 0, 0, 0.1); outline: none; }
+    button { background: linear-gradient(90deg, #2c3e50 0%, #4ca1af 100%); color: white; border: none; padding: 14px 32px; border-radius: 50px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2); }
+    button:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); }
+    button:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; box-shadow: none; }
+    button.stop-btn { background: linear-gradient(90deg, #cb2d3e 0%, #ef473a 100%); }
+    .hidden { display: none !important; }
+    #video-wrapper { position: relative; padding: 5px; background: linear-gradient(to right, #ece9e6, #ffffff); border-radius: 12px; box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05); margin-bottom: 20px; display: inline-block; width: 100%; max-width: 520px; }
+    #video-container { position: relative; width: 100%; margin: 0 auto; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4/3; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); }
+    video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    .recording-badge { position: absolute; top: 15px; right: 15px; background: rgba(0, 0, 0, 0.6); color: white; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; display: flex; align-items: center; backdrop-filter: blur(4px); }
+    .recording-dot { height: 10px; width: 10px; background-color: #ff4757; border-radius: 50%; display: inline-block; margin-right: 8px; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 71, 87, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0); } }
+    .status-bar { margin-top: 15px; font-weight: 600; color: var(--primary-color); min-height: 1.5em; font-size: 0.95rem; }
+    .progress-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-size: 0.9rem; color: #7f8c8d; font-weight: 600; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+    .timer { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; color: #e74c3c; display: none; }
+    .logo-text { font-size: 1.2rem; font-weight: 800; color: var(--secondary-color); }
+    .fade-in { animation: fadeIn 0.5s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+
+<body>
+  <div class="branding">Assesment Tool</div>
+
+  <div class="container fade-in">
+    <!-- LOGIN VIEW -->
+    <div id="view-login">
+      <h1>Welcome to our Portal</h1>
+      <p>Video Interview Portal</p>
+      <p style="font-size: 0.95em; opacity: 0.8;">Please enter your email to start your assessment.</p>
+      <input type="email" id="email-input" placeholder="candidate@example.com" required>
+      <br>
+      <button onclick="startApp()">Start Interview</button>
+    </div>
+
+    <!-- QUESTION VIEW -->
+    <div id="view-question" class="hidden">
+      <div class="progress-container">
+        <span class="logo-text">Assessment</span>
+        <span>Question <span id="q-current">1</span> / <span id="q-total">5</span></span>
+      </div>
+      <h2 id="question-text">Loading question...</h2>
+      <div id="video-wrapper">
+        <div id="video-container">
+          <video id="preview" autoplay muted playsinline></video>
+          <div id="recording-badge" class="recording-badge hidden">
+            <span class="recording-dot"></span>
+            <span id="timer-display">04:00</span>
+          </div>
+        </div>
+      </div>
+      <div id="controls">
+        <button id="btn-record" onclick="startRecording()">Start Recording</button>
+        <button id="btn-stop" onclick="stopRecording()" class="hidden stop-btn">Stop Recording</button>
+      </div>
+      <div id="status" class="status-bar"></div>
+    </div>
+
+    <!-- COMPLETED VIEW -->
+    <div id="view-done" class="hidden">
+      <h1 style="color: var(--primary-color);">Thank You!</h1>
+      <p>Your interview has been submitted successfully.</p>
+      <div style="font-size: 3rem; margin-top: 20px;">🎉</div>
+    </div>
+  </div>
+
+  <script>
+    // 🔴🔴🔴 IMPORTANT: PASTE YOUR NEW APPS SCRIPT APP URL HERE:
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwDYrZ6DTbN7jSJWmUtey9JATjrYqflxO35uv4OAZD9egfH5dTGLO3HcxA7bNaMvVqo/exec"; 
+
+    // State
+    let userEmail = "";
+    let questions = [];
+    let currentQuestionIndex = 0;
+    let mediaRecorder, stream, timerInterval;
+    let recordedChunks = [];
+    let recordingStartTime;
+    const MAX_RECORDING_TIME_MS = 4 * 60 * 1000;
+
+    // Load questions on load
+    window.onload = function () {
+      fetch(SCRIPT_URL)
+        .then(res => res.json())
+        .then(data => {
+          questions = data.questions;
+          document.getElementById('q-total').innerText = questions.length;
+        })
+        .catch(err => console.error("Error loading questions", err));
+    };
+
+    function startApp() {
+      const email = document.getElementById('email-input').value;
+      if (!email || !email.includes('@')) return showStatus("Please enter a valid email.", "red");
+      userEmail = email;
+
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(s => {
+          stream = s;
+          document.getElementById('preview').srcObject = stream;
+          showView('view-question');
+          loadQuestion();
+        })
+        .catch(e => {
+          alert("Camera/Mic access is required. Please check your browser settings!");
+          console.error(e);
+        });
+    }
+
+    function showView(viewId) {
+      document.querySelectorAll('.container > div').forEach(div => div.classList.add('hidden'));
+      document.getElementById(viewId).classList.remove('hidden');
+      document.getElementById(viewId).classList.add('fade-in');
+    }
+
+    function loadQuestion() {
+      if (currentQuestionIndex >= questions.length) {
+        showView('view-done');
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        return;
+      }
+      document.getElementById('question-text').innerText = questions[currentQuestionIndex];
+      document.getElementById('q-current').innerText = currentQuestionIndex + 1;
+      document.getElementById('btn-record').classList.remove('hidden');
+      document.getElementById('btn-stop').classList.add('hidden');
+      document.getElementById('recording-badge').classList.add('hidden');
+      document.getElementById('status').innerText = "";
+    }
+
+    function startRecording() {
+      recordedChunks = [];
+      mediaRecorder = new (window.MediaRecorder || window.webkitMediaRecorder)(stream, { mimeType: 'video/webm' });
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = uploadVideo;
+      mediaRecorder.start();
+
+      document.getElementById('btn-record').classList.add('hidden');
+      document.getElementById('btn-stop').classList.remove('hidden');
+      document.getElementById('btn-stop').disabled = false;
+      document.getElementById('recording-badge').classList.remove('hidden');
+      startTimer();
+    }
+
+    function startTimer() {
+      recordingStartTime = Date.now();
+      updateTimerDisplay(MAX_RECORDING_TIME_MS);
+      timerInterval = setInterval(() => {
+        const remaining = MAX_RECORDING_TIME_MS - (Date.now() - recordingStartTime);
+        if (remaining <= 0) stopRecording();
+        else updateTimerDisplay(remaining);
+      }, 1000);
+    }
+
+    function updateTimerDisplay(ms) {
+      const ts = Math.floor(ms / 1000), m = Math.floor(ts / 60), s = ts % 60;
+      document.getElementById('timer-display').innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+    }
+
+    function stopRecording() {
+      clearInterval(timerInterval);
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      document.getElementById('btn-stop').innerText = "Processing...";
+      document.getElementById('btn-stop').disabled = true;
+      document.getElementById('status').innerText = "Uploading your answer...";
+    }
+
+    // --- NEW: FETCH API INSTEAD OF GOOGLE.SCRIPT.RUN ---
+    function uploadVideo() {
+      const blob = new Blob(recordedChunks, { type: 'video/webm' });
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = function () {
+        const payload = {
+          base64data: reader.result.split(',')[1],
+          userEmail: userEmail,
+          questionIndex: currentQuestionIndex
+        };
+
+        fetch(SCRIPT_URL, {
+          method: 'POST',
+          redirect: 'follow', // Important for Apps Script redirects
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Prevent CORS preflight errors
+          body: JSON.stringify(payload)
+        })
+          .then(res => res.json())
+          .then(response => {
+            if (response.success) {
+              document.getElementById('btn-stop').innerText = "Stop Recording";
+              currentQuestionIndex++;
+              loadQuestion();
+            } else {
+              handleError("Upload failed: " + response.error);
+            }
+          })
+          .catch(err => handleError("Server error: " + err));
+      };
+    }
+
+    function handleError(msg) {
+      alert(msg);
+      document.getElementById('btn-stop').disabled = false;
+      document.getElementById('status').innerText = "Error. Please try again.";
+      document.getElementById('btn-record').classList.remove('hidden');
+      document.getElementById('btn-stop').classList.add('hidden');
+      document.getElementById('recording-badge').classList.add('hidden');
+    }
+    
+    function showStatus(msg, color) {
+      const st = document.getElementById('status');
+      st.innerText = msg;
+      if (color) st.style.color = color;
+    }
+  </script>
+</body>
+</html>
