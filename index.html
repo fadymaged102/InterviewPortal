@@ -109,7 +109,10 @@
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzE0Bpe53uCOWmUVtBWTdivTSNdWlkGo0LZ2wLUZebhWuF_c1RdvoCh2OFEvAoyzc4j/exec";
 
     // Upload tuning
-    const CHUNK_SIZE = 4 * 1024 * 1024;   // Must be a multiple of 256 KiB (Drive resumable upload rule)
+    // Chunk sizes must be multiples of 256 KiB (Drive resumable upload rule).
+    // A small first chunk gives quick visible progress; later chunks report every 2 MB.
+    const FIRST_CHUNK_SIZE = 1 * 1024 * 1024;
+    const CHUNK_SIZE = 2 * 1024 * 1024;
     const MAX_ATTEMPTS = 8;               // Consecutive failures before asking the user to retry
     const REQUEST_TIMEOUT_MS = 90 * 1000; // Per request (Apps Script can be slow to forward a chunk)
     const MAX_BACKOFF_MS = 30 * 1000;
@@ -333,7 +336,8 @@
             r = await callScript({ action: 'status', sessionUri: up.sessionUri, totalBytes: total });
           } else {
             setProgress(up.offset, total, "Uploading your answer…", true);
-            const chunk = up.blob.slice(up.offset, Math.min(up.offset + CHUNK_SIZE, total));
+            const size = up.offset === 0 ? FIRST_CHUNK_SIZE : CHUNK_SIZE;
+            const chunk = up.blob.slice(up.offset, Math.min(up.offset + size, total));
             r = await callScript({
               action: 'chunk', sessionUri: up.sessionUri, offset: up.offset, totalBytes: total,
               chunk: await blobToBase64(chunk)
