@@ -4,18 +4,19 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link
-    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Open+Sans:wght@400;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Atkinson+Hyperlegible+Next:wght@400;600&display=swap"
     rel="stylesheet">
   <style>
     /* ... YOUR EXACT SAME CSS STYLES GO HERE ... */
     :root { --primary-color: #e60000; --secondary-color: #2c3e50; --bg-gradient: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); --glass-bg: rgba(255, 255, 255, 0.95); --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15); }
-    body { font-family: 'Open Sans', sans-serif; background: radial-gradient(circle at 10% 20%, rgb(239, 246, 249) 0%, rgb(206, 239, 253) 90%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; overflow-x: hidden; }
-    .branding { position: absolute; top: 20px; left: 30px; font-family: 'Montserrat', sans-serif; font-weight: 800; font-size: 24px; color: var(--secondary-color); letter-spacing: 1px; z-index: 10; }
+    body { font-family: 'Atkinson Hyperlegible Next', system-ui, sans-serif; background: radial-gradient(circle at 10% 20%, rgb(239, 246, 249) 0%, rgb(206, 239, 253) 90%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; overflow-x: hidden; }
+    .branding { position: absolute; top: 20px; left: 30px; font-family: 'Bricolage Grotesque', system-ui, sans-serif; font-weight: 800; font-size: 24px; color: var(--secondary-color); letter-spacing: 1px; z-index: 10; }
     .branding span { color: var(--primary-color); }
     .container { background: var(--glass-bg); backdrop-filter: blur(8px); padding: 3rem; border-radius: 20px; box-shadow: var(--glass-shadow); width: 90%; max-width: 700px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.5); transition: transform 0.3s ease, box-shadow 0.3s ease; }
     .container:hover { transform: translateY(-5px); box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.2); }
-    h1 { font-family: 'Montserrat', sans-serif; margin-bottom: 0.5rem; color: var(--secondary-color); font-weight: 700; }
-    h2 { font-family: 'Montserrat', sans-serif; color: #34495e; margin-bottom: 20px; line-height: 1.4; }
+    button, input { font-family: inherit; }
+    h1 { font-family: 'Bricolage Grotesque', system-ui, sans-serif; margin-bottom: 0.5rem; color: var(--secondary-color); font-weight: 700; }
+    h2 { font-family: 'Bricolage Grotesque', system-ui, sans-serif; color: #34495e; margin-bottom: 20px; line-height: 1.4; }
     p { margin-bottom: 2rem; color: #7f8c8d; font-size: 1.1em; }
     input[type="email"] { width: 80%; padding: 15px; margin-bottom: 25px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 16px; transition: all 0.3s; background: #fdfdfd; }
     input[type="email"]:focus { border-color: var(--primary-color); box-shadow: 0 0 10px rgba(230, 0, 0, 0.1); outline: none; }
@@ -40,6 +41,7 @@
     .progress-fill.active { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.2) 0 10px, transparent 10px 20px), linear-gradient(90deg, #2c3e50 0%, #4ca1af 100%); background-size: 28px 28px, 100% 100%; animation: stripes 1s linear infinite; }
     @keyframes stripes { to { background-position: 28px 0, 0 0; } }
     .progress-label { margin-top: 8px; font-size: 0.9rem; color: #566573; font-variant-numeric: tabular-nums; }
+    .upload-note { margin: 10px 0 0; font-size: 0.9rem; color: #566573; font-weight: 600; }
     #upload-actions button { margin: 12px 6px 0; }
     button.secondary-btn { background: #fff; color: var(--secondary-color); border: 2px solid var(--secondary-color); box-shadow: none; }
     @media (prefers-reduced-motion: reduce) { .progress-fill.active { animation: none; } }
@@ -82,9 +84,10 @@
         <button id="btn-record" onclick="startRecording()">Start Recording</button>
         <button id="btn-stop" onclick="stopRecording()" class="hidden stop-btn">Stop Recording</button>
       </div>
-      <div id="upload-progress" class="upload-progress hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      <div id="upload-progress" class="upload-progress hidden">
+        <div id="progress-track" class="progress-track" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill" class="progress-fill"></div></div>
         <div id="progress-label" class="progress-label"></div>
+        <p class="upload-note">Please keep this tab open and active until the upload is complete. Closing it or switching to another tab or app may interrupt your upload.</p>
       </div>
       <div id="status" class="status-bar" aria-live="polite"></div>
       <div id="upload-actions" class="hidden">
@@ -428,7 +431,7 @@
     function setProgress(sent, total, label, active) {
       const pct = total ? Math.floor((sent / total) * 100) : 0;
       $('upload-progress').classList.remove('hidden');
-      $('upload-progress').setAttribute('aria-valuenow', pct);
+      $('progress-track').setAttribute('aria-valuenow', pct);
       $('progress-fill').style.transform = 'translateX(' + (pct - 100) + '%)';
       $('progress-fill').classList.toggle('active', !!active);
       $('progress-label').innerText = (label ? label + " " : "") + formatMB(sent) + " of " + formatMB(total) + " (" + pct + "%)";
