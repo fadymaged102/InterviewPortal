@@ -34,6 +34,15 @@
     .progress-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; font-size: 0.9rem; color: #7f8c8d; font-weight: 600; border-bottom: 1px solid #eee; padding-bottom: 10px; }
     .timer { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; color: #e74c3c; display: none; }
     .logo-text { font-size: 1.2rem; font-weight: 800; color: var(--secondary-color); }
+    .upload-progress { margin: 15px auto 0; max-width: 520px; }
+    .progress-track { height: 10px; background: #e8ecef; border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 100%; transform: translateX(-100%); background: linear-gradient(90deg, #2c3e50 0%, #4ca1af 100%); transition: transform 0.4s ease; }
+    .progress-fill.active { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.2) 0 10px, transparent 10px 20px), linear-gradient(90deg, #2c3e50 0%, #4ca1af 100%); background-size: 28px 28px, 100% 100%; animation: stripes 1s linear infinite; }
+    @keyframes stripes { to { background-position: 28px 0, 0 0; } }
+    .progress-label { margin-top: 8px; font-size: 0.9rem; color: #566573; font-variant-numeric: tabular-nums; }
+    #upload-actions button { margin: 12px 6px 0; }
+    button.secondary-btn { background: #fff; color: var(--secondary-color); border: 2px solid var(--secondary-color); box-shadow: none; }
+    @media (prefers-reduced-motion: reduce) { .progress-fill.active { animation: none; } }
     .fade-in { animation: fadeIn 0.5s ease-in; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
@@ -73,7 +82,15 @@
         <button id="btn-record" onclick="startRecording()">Start Recording</button>
         <button id="btn-stop" onclick="stopRecording()" class="hidden stop-btn">Stop Recording</button>
       </div>
-      <div id="status" class="status-bar"></div>
+      <div id="upload-progress" class="upload-progress hidden" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <div id="progress-label" class="progress-label"></div>
+      </div>
+      <div id="status" class="status-bar" aria-live="polite"></div>
+      <div id="upload-actions" class="hidden">
+        <button id="btn-retry" onclick="retryUpload()">Retry Upload</button>
+        <button id="btn-rerecord" onclick="discardAndRerecord()" class="secondary-btn">Record Again</button>
+      </div>
     </div>
 
     <!-- COMPLETED VIEW -->
@@ -86,37 +103,70 @@
 
   <script>
     // 🔴🔴🔴 IMPORTANT: PASTE YOUR NEW APPS SCRIPT APP URL HERE:
-    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzE0Bpe53uCOWmUVtBWTdivTSNdWlkGo0LZ2wLUZebhWuF_c1RdvoCh2OFEvAoyzc4j/exec"; 
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzE0Bpe53uCOWmUVtBWTdivTSNdWlkGo0LZ2wLUZebhWuF_c1RdvoCh2OFEvAoyzc4j/exec";
+
+    // Upload tuning
+    const CHUNK_SIZE = 4 * 1024 * 1024;   // Must be a multiple of 256 KiB (Drive resumable upload rule)
+    const MAX_ATTEMPTS = 8;               // Consecutive failures before asking the user to retry
+    const REQUEST_TIMEOUT_MS = 90 * 1000; // Per request (Apps Script can be slow to forward a chunk)
+    const MAX_BACKOFF_MS = 30 * 1000;
+    // Cap the bitrate so a full 4-minute answer is ~32 MB instead of 75+ MB
+    const VIDEO_BITS_PER_SECOND = 1000000;
+    const AUDIO_BITS_PER_SECOND = 64000;
 
     // State
     let userEmail = "";
     let questions = [];
+    let questionsPromise = null;
     let currentQuestionIndex = 0;
     let mediaRecorder, stream, timerInterval;
     let recordedChunks = [];
     let recordingStartTime;
     const MAX_RECORDING_TIME_MS = 4 * 60 * 1000;
 
-    // Load questions on load
+    // The upload in progress / awaiting retry. The recording blob stays here until Drive confirms it.
+    let pendingUpload = null;
+    let uploading = false;
+
+    const $ = id => document.getElementById(id);
+
+    // Load questions on load (retried, since a flaky connection here used to skip straight to "Thank You")
     window.onload = function () {
-      fetch(SCRIPT_URL)
-        .then(res => res.json())
-        .then(data => {
-          questions = data.questions;
-          document.getElementById('q-total').innerText = questions.length;
-        })
-        .catch(err => console.error("Error loading questions", err));
+      questionsPromise = loadQuestions();
     };
 
-    function startApp() {
-      const email = document.getElementById('email-input').value;
-      if (!email || !email.includes('@')) return showStatus("Please enter a valid email.", "red");
+    async function loadQuestions() {
+      for (let attempt = 1; ; attempt++) {
+        try {
+          const data = await callScript(null, 20000);
+          if (!Array.isArray(data.questions) || data.questions.length === 0) throw new Error("No questions returned");
+          questions = data.questions;
+          $('q-total').innerText = questions.length;
+          return questions;
+        } catch (err) {
+          console.error("Error loading questions", err);
+          if (attempt >= 4) throw err;
+          await sleep(1000 * attempt);
+        }
+      }
+    }
+
+    async function startApp() {
+      const email = $('email-input').value.trim();
+      if (!email || !email.includes('@')) return alert("Please enter a valid email.");
       userEmail = email;
 
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      try {
+        await (questionsPromise || (questionsPromise = loadQuestions()));
+      } catch (e) {
+        questionsPromise = null; // allow another attempt on the next click
+        return alert("Could not load the interview questions. Please check your connection and try again.");
+      }
+
+      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true })
         .then(s => {
           stream = s;
-          document.getElementById('preview').srcObject = stream;
+          $('preview').srcObject = stream;
           showView('view-question');
           loadQuestion();
         })
@@ -128,8 +178,8 @@
 
     function showView(viewId) {
       document.querySelectorAll('.container > div').forEach(div => div.classList.add('hidden'));
-      document.getElementById(viewId).classList.remove('hidden');
-      document.getElementById(viewId).classList.add('fade-in');
+      $(viewId).classList.remove('hidden');
+      $(viewId).classList.add('fade-in');
     }
 
     function loadQuestion() {
@@ -138,25 +188,49 @@
         if (stream) stream.getTracks().forEach(track => track.stop());
         return;
       }
-      document.getElementById('question-text').innerText = questions[currentQuestionIndex];
-      document.getElementById('q-current').innerText = currentQuestionIndex + 1;
-      document.getElementById('btn-record').classList.remove('hidden');
-      document.getElementById('btn-stop').classList.add('hidden');
-      document.getElementById('recording-badge').classList.add('hidden');
-      document.getElementById('status').innerText = "";
+      $('question-text').innerText = questions[currentQuestionIndex];
+      $('q-current').innerText = currentQuestionIndex + 1;
+      showRecordControls();
+      hideProgress();
+      setStatus("");
+    }
+
+    function showRecordControls() {
+      $('btn-record').classList.remove('hidden');
+      $('btn-stop').classList.add('hidden');
+      $('btn-stop').innerText = "Stop Recording";
+      $('recording-badge').classList.add('hidden');
+      $('upload-actions').classList.add('hidden');
+    }
+
+    // Safari only records MP4; Chrome/Firefox record WebM. Pick the first one the browser supports.
+    function pickMimeType() {
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return "";
+      const candidates = ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'];
+      return candidates.find(t => MediaRecorder.isTypeSupported(t)) || "";
     }
 
     function startRecording() {
       recordedChunks = [];
-      mediaRecorder = new (window.MediaRecorder || window.webkitMediaRecorder)(stream, { mimeType: 'video/webm' });
-      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
-      mediaRecorder.onstop = uploadVideo;
-      mediaRecorder.start();
+      const opts = { videoBitsPerSecond: VIDEO_BITS_PER_SECOND, audioBitsPerSecond: AUDIO_BITS_PER_SECOND };
+      const mime = pickMimeType();
+      if (mime) opts.mimeType = mime;
+      try {
+        mediaRecorder = new MediaRecorder(stream, opts);
+      } catch (e) {
+        console.warn("MediaRecorder options rejected, using defaults", e);
+        mediaRecorder = new MediaRecorder(stream);
+      }
+      mediaRecorder.ondataavailable = e => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = onRecordingStopped;
+      mediaRecorder.start(1000); // collect data every second rather than all at once on stop
 
-      document.getElementById('btn-record').classList.add('hidden');
-      document.getElementById('btn-stop').classList.remove('hidden');
-      document.getElementById('btn-stop').disabled = false;
-      document.getElementById('recording-badge').classList.remove('hidden');
+      $('btn-record').classList.add('hidden');
+      $('btn-stop').classList.remove('hidden');
+      $('btn-stop').innerText = "Stop Recording";
+      $('btn-stop').disabled = false;
+      $('recording-badge').classList.remove('hidden');
+      setStatus("");
       startTimer();
     }
 
@@ -172,63 +246,231 @@
 
     function updateTimerDisplay(ms) {
       const ts = Math.floor(ms / 1000), m = Math.floor(ts / 60), s = ts % 60;
-      document.getElementById('timer-display').innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+      $('timer-display').innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
     }
 
     function stopRecording() {
       clearInterval(timerInterval);
       if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
-      document.getElementById('btn-stop').innerText = "Processing...";
-      document.getElementById('btn-stop').disabled = true;
-      document.getElementById('status').innerText = "Uploading your answer...";
+      $('btn-stop').innerText = "Processing...";
+      $('btn-stop').disabled = true;
+      $('recording-badge').classList.add('hidden');
     }
 
-    // --- NEW: FETCH API INSTEAD OF GOOGLE.SCRIPT.RUN ---
-    function uploadVideo() {
-      const blob = new Blob(recordedChunks, { type: 'video/webm' });
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = function () {
-        const payload = {
-          base64data: reader.result.split(',')[1],
-          userEmail: userEmail,
-          questionIndex: currentQuestionIndex
-        };
-
-        fetch(SCRIPT_URL, {
-          method: 'POST',
-          redirect: 'follow', // Important for Apps Script redirects
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Prevent CORS preflight errors
-          body: JSON.stringify(payload)
-        })
-          .then(res => res.json())
-          .then(response => {
-            if (response.success) {
-              document.getElementById('btn-stop').innerText = "Stop Recording";
-              currentQuestionIndex++;
-              loadQuestion();
-            } else {
-              handleError("Upload failed: " + response.error);
-            }
-          })
-          .catch(err => handleError("Server error: " + err));
+    function onRecordingStopped() {
+      const type = (mediaRecorder && mediaRecorder.mimeType) || (recordedChunks[0] && recordedChunks[0].type) || 'video/webm';
+      const blob = new Blob(recordedChunks, { type });
+      recordedChunks = [];
+      if (blob.size === 0) {
+        showRecordControls();
+        setStatus("Nothing was recorded. Please try recording again.");
+        return;
+      }
+      pendingUpload = {
+        blob,
+        mimeType: type,
+        ext: type.indexOf('mp4') !== -1 ? 'mp4' : 'webm',
+        questionIndex: currentQuestionIndex,
+        sessionUri: null,
+        offset: 0
       };
+      runUpload();
     }
 
-    function handleError(msg) {
-      alert(msg);
-      document.getElementById('btn-stop').disabled = false;
-      document.getElementById('status').innerText = "Error. Please try again.";
-      document.getElementById('btn-record').classList.remove('hidden');
-      document.getElementById('btn-stop').classList.add('hidden');
-      document.getElementById('recording-badge').classList.add('hidden');
+    // --- Resumable, chunked upload --------------------------------------------
+
+    async function runUpload() {
+      if (!pendingUpload || uploading) return;
+      const up = pendingUpload;
+      uploading = true;
+      $('upload-actions').classList.add('hidden');
+      $('btn-stop').classList.remove('hidden');
+      $('btn-stop').innerText = "Uploading...";
+      $('btn-stop').disabled = true;
+      setStatus("");
+      setProgress(up.offset, up.blob.size, "Uploading your answer…");
+
+      try {
+        await uploadResumable(up);
+        pendingUpload = null;
+        uploading = false;
+        currentQuestionIndex++;
+        loadQuestion();
+      } catch (err) {
+        uploading = false;
+        console.error("Upload failed", err);
+        showUploadFailed();
+      }
     }
-    
-    function showStatus(msg, color) {
-      const st = document.getElementById('status');
-      st.innerText = msg;
-      if (color) st.style.color = color;
+
+    async function uploadResumable(up) {
+      const total = up.blob.size;
+      let failures = 0;
+      // If this upload was interrupted before, ask Drive how far it got instead of resending.
+      let verify = !!up.sessionUri;
+
+      while (true) {
+        try {
+          if (!up.sessionUri) {
+            setProgress(0, total, "Preparing upload…");
+            const r = await callScript({
+              action: 'init', totalBytes: total, mimeType: up.mimeType, ext: up.ext,
+              userEmail, questionIndex: up.questionIndex
+            });
+            if (!r.success) throw serverError(r);
+            up.sessionUri = r.sessionUri;
+            up.offset = 0;
+            verify = false;
+          }
+
+          let r;
+          const before = up.offset;
+          if (verify) {
+            setProgress(up.offset, total, "Reconnecting to upload…");
+            r = await callScript({ action: 'status', sessionUri: up.sessionUri, totalBytes: total });
+          } else {
+            setProgress(up.offset, total, "Uploading your answer…", true);
+            const chunk = up.blob.slice(up.offset, Math.min(up.offset + CHUNK_SIZE, total));
+            r = await callScript({
+              action: 'chunk', sessionUri: up.sessionUri, offset: up.offset, totalBytes: total,
+              chunk: await blobToBase64(chunk)
+            });
+          }
+
+          if (!r.success) {
+            if (r.sessionExpired) { up.sessionUri = null; up.offset = 0; }
+            throw serverError(r);
+          }
+          if (r.done) {
+            setProgress(total, total, "Upload complete ✓");
+            return r.fileId;
+          }
+          up.offset = r.committed;
+          if (!verify && up.offset <= before) throw new Error("Upload made no progress");
+          verify = false;
+          failures = 0;
+          setProgress(up.offset, total, "Uploading your answer…");
+        } catch (err) {
+          failures++;
+          console.warn("Upload attempt failed (" + failures + "/" + MAX_ATTEMPTS + ")", err);
+          if (err.fatal || failures >= MAX_ATTEMPTS) throw err;
+          verify = !!up.sessionUri;
+          await waitBeforeRetry(failures, up.offset, total);
+        }
+      }
     }
+
+    function serverError(r) {
+      const err = new Error(r.error || "Server rejected the upload");
+      // Explicit 4xx from Drive (other than an expired session) won't fix itself by retrying.
+      err.fatal = r.retryable === false && !r.sessionExpired;
+      return err;
+    }
+
+    // Exponential backoff with jitter; if the device is offline, wait for it to come back.
+    async function waitBeforeRetry(failures, offset, total) {
+      if (!navigator.onLine) {
+        setProgress(offset, total, "Connection lost. Waiting to reconnect… your recording is safe.");
+        await new Promise(resolve => window.addEventListener('online', resolve, { once: true }));
+        await sleep(1000);
+        return;
+      }
+      const delay = Math.min(MAX_BACKOFF_MS, 1000 * Math.pow(2, failures - 1)) + Math.random() * 1000;
+      const until = Date.now() + delay;
+      while (Date.now() < until && navigator.onLine) {
+        const secs = Math.ceil((until - Date.now()) / 1000);
+        setProgress(offset, total, "Connection problem. Retrying in " + secs + "s (attempt " + (failures + 1) + " of " + MAX_ATTEMPTS + ")… your recording is safe.");
+        await sleep(Math.min(1000, until - Date.now()));
+      }
+    }
+
+    // POST (or GET when payload is null) to Apps Script with a timeout. Always returns parsed JSON or throws.
+    async function callScript(payload, timeoutMs = REQUEST_TIMEOUT_MS) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const opts = { redirect: 'follow', signal: controller.signal };
+        if (payload) {
+          opts.method = 'POST';
+          opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' }; // simple request: no CORS preflight
+          opts.body = JSON.stringify(payload);
+        }
+        const res = await fetch(SCRIPT_URL, opts);
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const text = await res.text();
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          // Apps Script returns an HTML error page when it crashes or times out
+          throw new Error("Unexpected server response: " + text.slice(0, 200));
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') throw new Error("Request timed out");
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, Math.max(0, ms))); }
+
+    // --- Upload UI -------------------------------------------------------------
+
+    function setProgress(sent, total, label, active) {
+      const pct = total ? Math.floor((sent / total) * 100) : 0;
+      $('upload-progress').classList.remove('hidden');
+      $('upload-progress').setAttribute('aria-valuenow', pct);
+      $('progress-fill').style.transform = 'translateX(' + (pct - 100) + '%)';
+      $('progress-fill').classList.toggle('active', !!active);
+      $('progress-label').innerText = (label ? label + " " : "") + formatMB(sent) + " of " + formatMB(total) + " (" + pct + "%)";
+    }
+
+    function hideProgress() {
+      $('upload-progress').classList.add('hidden');
+      $('progress-fill').style.transform = 'translateX(-100%)';
+      $('progress-fill').classList.remove('active');
+    }
+
+    function formatMB(bytes) { return (bytes / (1024 * 1024)).toFixed(1) + " MB"; }
+
+    function showUploadFailed() {
+      $('progress-fill').classList.remove('active');
+      $('btn-stop').classList.add('hidden');
+      $('btn-record').classList.add('hidden');
+      $('upload-actions').classList.remove('hidden');
+      setStatus("The upload was interrupted. Your recording is still saved on this page. Check your connection and tap Retry Upload. It will continue from where it stopped.");
+    }
+
+    function retryUpload() { runUpload(); }
+
+    function discardAndRerecord() {
+      if (!confirm("Discard this recording and record your answer again?")) return;
+      pendingUpload = null;
+      hideProgress();
+      showRecordControls();
+      setStatus("");
+    }
+
+    function setStatus(msg) { $('status').innerText = msg; }
+
+    // Resume automatically when the connection comes back after a failed upload.
+    window.addEventListener('online', () => {
+      if (pendingUpload && !uploading) runUpload();
+    });
+
+    // Warn before closing the tab while an answer hasn't reached Drive yet.
+    window.addEventListener('beforeunload', e => {
+      if (pendingUpload) { e.preventDefault(); e.returnValue = ''; }
+    });
   </script>
 </body>
 </html>
