@@ -358,7 +358,7 @@
           console.warn("Upload attempt failed (" + failures + "/" + MAX_ATTEMPTS + ")", err);
           if (err.fatal || failures >= MAX_ATTEMPTS) throw err;
           verify = !!up.sessionUri;
-          await waitBeforeRetry(failures, up.offset, total);
+          await waitBeforeRetry(failures, up.offset, total, err);
         }
       }
     }
@@ -367,11 +367,12 @@
       const err = new Error(r.error || "Server rejected the upload");
       // Explicit 4xx from Drive (other than an expired session) won't fix itself by retrying.
       err.fatal = r.retryable === false && !r.sessionExpired;
+      err.fromServer = true;
       return err;
     }
 
     // Exponential backoff with jitter; if the device is offline, wait for it to come back.
-    async function waitBeforeRetry(failures, offset, total) {
+    async function waitBeforeRetry(failures, offset, total, err) {
       if (!navigator.onLine) {
         setProgress(offset, total, "Connection lost. Waiting to reconnect… your recording is safe.");
         await new Promise(resolve => window.addEventListener('online', resolve, { once: true }));
@@ -382,7 +383,7 @@
       const until = Date.now() + delay;
       while (Date.now() < until && navigator.onLine) {
         const secs = Math.ceil((until - Date.now()) / 1000);
-        setProgress(offset, total, "Connection problem. Retrying in " + secs + "s (attempt " + (failures + 1) + " of " + MAX_ATTEMPTS + ")… your recording is safe.");
+        setProgress(offset, total, (err && err.fromServer ? "The server had a problem saving your video." : "Connection problem.") + " Retrying in " + secs + "s (attempt " + (failures + 1) + " of " + MAX_ATTEMPTS + ")… your recording is safe.");
         await sleep(Math.min(1000, until - Date.now()));
       }
     }
